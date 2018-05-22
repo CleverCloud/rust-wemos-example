@@ -17,7 +17,6 @@ var hex_color = 0;
       },
       type: "GET",
       success: function (data) {
-
         // check if null return (no results from API)
         if (data.client_number == 0) {
         } else if (data.client_number == 1){
@@ -80,7 +79,8 @@ var hex_color = 0;
     var xhr = new XMLHttpRequest();
     xhr.open("PUT", "/color", true);
     xhr.setRequestHeader("Content-Type", "text/plain");
-    xhr.send(red.toString().padStart(3, '0') + green.toString().padStart(3, '0') + blue.toString().padStart(3, '0'));
+    xhr.setRequestHeader("color", red.toString().padStart(3, '0') + green.toString().padStart(3, '0') + blue.toString().padStart(3, '0'));
+    xhr.send()
     if (wemos_count > 0) {
       notify("📡 Sent <code> " + hex_color + "</code>  to  <code>" + wemos_count + "</code>  wemos", "success");
     } else {

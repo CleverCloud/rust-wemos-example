@@ -1,29 +1,90 @@
-#![feature(plugin)]
-#![plugin(rocket_codegen)]
-
-extern crate rocket;
-
-use rocket::response::NamedFile;
+extern crate ws;
+use ws::{listen, Handler, Request, Response, Result, Sender, Handshake, CloseCode, Message};
 
 use std::{
-    io, path::{Path, PathBuf},
+    io::prelude::*,
+    fs::File,
+    path::Path,
 };
 
-const PUBLIC: &'static str = "public/";
-const INDEX_HTML: &'static str = "public/index.html";
+const ADDR: &'static str = "127.0.0.1:8000";
 
-#[get("/")]
-fn index() -> io::Result<NamedFile> {
-    NamedFile::open(INDEX_HTML)
+struct Server {
+    index_html: Vec<u8>,
+    main_js: Vec<u8>,
+    main_css: Vec<u8>,
+    out: Sender,
+    nb_connection: u8,
 }
 
-#[get("/<file..>")]
-fn files(file: PathBuf) -> Option<NamedFile> {
-    NamedFile::open(Path::new(PUBLIC).join(file)).ok()
+impl Server {
+    fn new(out: Sender) -> Self {
+        Self {
+            out,
+            index_html: get_file_content("public/index.html"),
+            main_js: get_file_content("public/javascript/main.js"),
+            main_css: get_file_content("public/styles/main.css"),
+            nb_connection: 0,
+        }
+    }
+}
+
+fn get_file_content<P: AsRef<Path>>(file: P) -> Vec<u8> {
+    let mut f   = File::open(file).expect("can't open static file");
+    let mut buf = Vec::new();
+
+    f.read_to_end(&mut buf).expect("can't read static file");
+    buf
+}
+
+impl Handler for Server {
+
+     fn on_open(&mut self, _shake: Handshake) -> Result<()> {
+        println!("new connection");
+        self.nb_connection += 1;
+        Ok(())
+    }
+
+    fn on_close(&mut self, _code: CloseCode, _reason: &str) {
+        println!("connection closed");
+        self.nb_connection -= 1;
+    }
+
+    fn on_request(&mut self, req: &Request) -> Result<(Response)> {
+        match req.resource() {
+            "/ws" => Response::from_request(req),
+
+            "/status" => {
+                let client_number = format!("{{ \"client_number\": {} }}", self.nb_connection);
+                Ok(Response::new(200, "OK", client_number.into()))
+            },
+
+            "/color" => {
+                if let Some(color) = req.header("color") {
+                    // Expected format is: RRRGGGBBB (as in 255000000, 035127078, ...)
+                    let msg = Message::from(color.as_slice());
+                    self.out.broadcast(msg)?;
+                    Ok(Response::new(200, "OK", vec![]))
+                }
+                else {
+                    // Missing the "color" param in the header
+                    Ok(Response::new(422, "Unprocessable Entity", vec![]))
+                }
+            },
+
+            // ==== Static files
+            "/" => Ok(Response::new(200, "OK", self.index_html.clone())),
+
+            "/javascript/main.js" => Ok(Response::new(200, "OK", self.main_js.clone())),
+
+            "/styles/main.css" => Ok(Response::new(200, "OK", self.main_css.clone())),
+
+            _ => Ok(Response::new(404, "Not Found", b"404 - Not Found".to_vec())),
+        }
+    }
 }
 
 fn main() {
-    rocket::ignite()
-        .mount("/", routes![index, files])
-        .launch();
+    println!("Server running at http://{}", ADDR);
+    listen(ADDR, |out| Server::new(out)).unwrap()
 }
