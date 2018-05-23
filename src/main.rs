@@ -7,14 +7,15 @@ use std::{
     path::Path,
 };
 
-const ADDR: &'static str = "127.0.0.1:8000";
+const ADDR: &'static str = "0.0.0.0:8080";
+
+static mut NB_CONNECTION: i32 = 0;
 
 struct Server {
     index_html: Vec<u8>,
     main_js: Vec<u8>,
     main_css: Vec<u8>,
     out: Sender,
-    nb_connection: u8,
 }
 
 impl Server {
@@ -24,7 +25,6 @@ impl Server {
             index_html: get_file_content("public/index.html"),
             main_js: get_file_content("public/javascript/main.js"),
             main_css: get_file_content("public/styles/main.css"),
-            nb_connection: 0,
         }
     }
 }
@@ -41,13 +41,13 @@ impl Handler for Server {
 
      fn on_open(&mut self, _shake: Handshake) -> Result<()> {
         println!("new connection");
-        self.nb_connection += 1;
+        unsafe{ NB_CONNECTION += 1; }
         Ok(())
     }
 
     fn on_close(&mut self, _code: CloseCode, _reason: &str) {
         println!("connection closed");
-        self.nb_connection -= 1;
+        unsafe{ NB_CONNECTION -= 1; }
     }
 
     fn on_request(&mut self, req: &Request) -> Result<(Response)> {
@@ -55,7 +55,7 @@ impl Handler for Server {
             "/ws" => Response::from_request(req),
 
             "/status" => {
-                let client_number = format!("{{ \"client_number\": {} }}", self.nb_connection);
+                let client_number = format!("{{ \"client_number\": {} }}", unsafe{ NB_CONNECTION });
                 Ok(Response::new(200, "OK", client_number.into()))
             },
 
