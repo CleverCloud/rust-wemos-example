@@ -1,3 +1,5 @@
+> **DEPRECATED**: This example is no longer maintained and is kept only for reference purposes.
+
 # Wemos websocket LED Backend
 
 A Rust backend for the wemos LED project, by Clever Cloud. 
